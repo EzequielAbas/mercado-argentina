@@ -48,6 +48,12 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"]
 )
 
+from fastapi.responses import RedirectResponse
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")
+
 # ── Cache simple en memoria (TTL segundos) para no castigar a las fuentes ──
 _CACHE: dict[str, tuple[float, object]] = {}
 

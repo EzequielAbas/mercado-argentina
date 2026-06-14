@@ -1,8 +1,36 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Entornos virtuales
 .venv/
 venv/
+env/
+
+# Variables de entorno / credenciales
 .env
+*.json
+!package.json
+
+# IDEs
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Datos personales (por seguridad extra)
+cartera_local.py
+drive_credentials.json
+drive_token.json
+historial_patrimonio.json
+reporte_cartera.html
