@@ -21,6 +21,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import Response
 
 import fuente_argentinadatos as adatos
 import fuente_bonistas as bonistas
@@ -87,7 +88,9 @@ def _df_records(df):
 @app.get("/salud")
 def salud():
     return {"ok": True, "screener": SCREENER_OK, "analisis_tecnico": AT_OK}
-
+@app.head("/salud", include_in_schema=False)
+def salud_head():
+    return Response(status_code=200)
 
 @app.get("/macro")
 def macro():
