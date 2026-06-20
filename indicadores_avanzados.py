@@ -337,6 +337,69 @@ def analizar_completo(df: pd.DataFrame) -> dict | None:
     }
 
 
+# ─────────────────────────────────────────────────────────────
+#  MÉTRICAS DE RIESGO DE CARTERA
+# ─────────────────────────────────────────────────────────────
+
+def _retornos_diarios(serie_precios: pd.Series) -> pd.Series:
+    return serie_precios.pct_change().dropna()
+
+
+def volatilidad_anualizada(serie_precios: pd.Series, periodos_año: int = 252) -> float | None:
+    r = _retornos_diarios(serie_precios)
+    if len(r) < 2:
+        return None
+    return float(r.std() * np.sqrt(periodos_año))
+
+
+def sharpe(serie_precios: pd.Series, tasa_libre: float = 0.0,
+           periodos_año: int = 252) -> float | None:
+    r = _retornos_diarios(serie_precios)
+    if len(r) < 2 or r.std() == 0:
+        return None
+    exceso = r.mean() - tasa_libre / periodos_año
+    return float(exceso / r.std() * np.sqrt(periodos_año))
+
+
+def drawdown_maximo(serie_precios: pd.Series) -> float | None:
+    if len(serie_precios) < 2:
+        return None
+    maximo_acum = serie_precios.cummax()
+    drawdown = (serie_precios - maximo_acum) / maximo_acum
+    return float(drawdown.min())
+
+
+def valor_en_riesgo(serie_precios: pd.Series, confianza: float = 0.95) -> float | None:
+    r = _retornos_diarios(serie_precios)
+    if len(r) < 5:
+        return None
+    return float(np.percentile(r, (1 - confianza) * 100))
+
+
+def resumen_riesgo(historial: list) -> dict | None:
+    """
+    Recibe la lista del historial_patrimonio.json (dicts con 'fecha' y 'patrimonio').
+    Devuelve un dict con todas las métricas de riesgo.
+    """
+    if not historial or len(historial) < 5:
+        return None
+    precios = pd.Series([h["patrimonio"] for h in historial], dtype=float)
+    vol = volatilidad_anualizada(precios)
+    sp = sharpe(precios)
+    dd = drawdown_maximo(precios)
+    var95 = valor_en_riesgo(precios)
+    ultimo = float(precios.iloc[-1])
+    var95_ars = var95 * ultimo if var95 is not None else None
+    return {
+        "volatilidad_anual": round(vol * 100, 1) if vol is not None else None,
+        "sharpe": round(sp, 2) if sp is not None else None,
+        "drawdown_maximo_pct": round(dd * 100, 1) if dd is not None else None,
+        "var_95_pct": round(var95 * 100, 2) if var95 is not None else None,
+        "var_95_ars": round(var95_ars, 0) if var95_ars is not None else None,
+        "n_dias": len(historial),
+    }
+
+
 if __name__ == "__main__":
     # Prueba con datos sintéticos
     np.random.seed(42)
