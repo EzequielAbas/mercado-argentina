@@ -324,14 +324,31 @@ def get_curves(settlement: str = "24hs") -> dict:
 # HTML helpers
 # ─────────────────────────────────────────────────────────────
 
-def bonds_to_html_table(df: pd.DataFrame, max_rows: int = 20, show_mep: bool = False) -> str:
+def bonds_to_html_table(df: pd.DataFrame, max_rows: int = 20, show_mep: bool = False,
+                        cartera_tickers: set | None = None, sort_by_tir: bool = False) -> str:
     """Convierte DataFrame de bonos en tabla HTML. show_mep muestra columna MEP implícito."""
     if df.empty:
         return "<p style='color:#888;font-size:12px'>Sin datos disponibles</p>"
 
+    if sort_by_tir and "tir" in df.columns:
+        df = df.copy()
+        df["_tir_abs"] = df["tir"].abs()
+        df = df.sort_values("_tir_abs", ascending=False).drop(columns=["_tir_abs"])
+
+    cartera_tickers = cartera_tickers or set()
+    shown = df.head(max_rows)
+    extra_en_cartera = []
+    if cartera_tickers:
+        shown_tickers = set(shown["ticker"].values)
+        for tk in cartera_tickers:
+            if tk not in shown_tickers:
+                match = df[df["ticker"] == tk]
+                if not match.empty:
+                    extra_en_cartera.append(match.iloc[0])
+
     extra_header = "<th>MEP impl.</th>" if show_mep else ""
     rows_html = ""
-    for _, r in df.head(max_rows).iterrows():
+    for _, r in pd.concat([shown, pd.DataFrame(extra_en_cartera)]).iterrows():
         tir_val  = r.get("tir", None)
         tna_val  = r.get("tna", None)
         dur_val  = r.get("modified_duration", None)
@@ -369,9 +386,11 @@ def bonds_to_html_table(df: pd.DataFrame, max_rows: int = 20, show_mep: bool = F
         elif index == "USDL":
             bg = "background:#e9f7ef"
 
+        cartera_badge = ' <span style="font-size:8px;background:#00d4aa;color:#000;padding:1px 4px;border-radius:3px;vertical-align:middle">EN CARTERA</span>' if ticker in cartera_tickers else ""
+
         rows_html += f"""
         <tr style="{bg}">
-          <td><b style="font-size:11px">{ticker}</b></td>
+          <td><b style="font-size:11px">{ticker}</b>{cartera_badge}</td>
           <td style="text-align:right">{price_str}</td>
           <td style="color:{day_color};text-align:right">{day_str}</td>
           <td style="text-align:right">{tir_str}</td>
@@ -451,7 +470,7 @@ def fx_to_html_table(df_fx: pd.DataFrame, max_rows: int = 12) -> str:
     </table>"""
 
 
-def get_panel_bonistas_html() -> str:
+def get_panel_bonistas_html(cartera_tickers: set | None = None) -> str:
     """
     Genera el panel completo de Bonistas para insertar en el reporte HTML.
     Incluye: market status, FX, soberanos, CER, LECAP.
@@ -486,11 +505,12 @@ def get_panel_bonistas_html() -> str:
         df_fija = df_all[df_all["bond_family"].isin(["LETRAS-FIJO", "BONO-FIJA"])].copy()
         df_ons  = df_all[df_all["bond_family"].isin(["ONS"])].copy()
 
-    tabla_fx   = fx_to_html_table(df_fx, max_rows=14)
-    tabla_sov  = bonds_to_html_table(df_sov,  max_rows=14)
-    tabla_cer  = bonds_to_html_table(df_cer,  max_rows=10)
-    tabla_fija = bonds_to_html_table(df_fija, max_rows=10)
-    tabla_ons  = bonds_to_html_table(df_ons,  max_rows=10)
+    _ct = cartera_tickers or set()
+    tabla_fx   = fx_to_html_table(df_fx, max_rows=4)
+    tabla_sov  = bonds_to_html_table(df_sov,  max_rows=4, cartera_tickers=_ct, sort_by_tir=True)
+    tabla_cer  = bonds_to_html_table(df_cer,  max_rows=4, cartera_tickers=_ct, sort_by_tir=True)
+    tabla_fija = bonds_to_html_table(df_fija, max_rows=4, cartera_tickers=_ct, sort_by_tir=True)
+    tabla_ons  = bonds_to_html_table(df_ons,  max_rows=4, cartera_tickers=_ct, sort_by_tir=True)
 
     ts = datetime.now().strftime("%d/%m/%Y %H:%M")
 
