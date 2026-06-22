@@ -376,27 +376,45 @@ def valor_en_riesgo(serie_precios: pd.Series, confianza: float = 0.95) -> float 
     return float(np.percentile(r, (1 - confianza) * 100))
 
 
-def resumen_riesgo(historial: list) -> dict | None:
+def resumen_riesgo(historial: list, max_retorno_diario: float = 0.15) -> dict | None:
     """
     Recibe la lista del historial_patrimonio.json (dicts con 'fecha' y 'patrimonio').
+    Filtra retornos diarios > |max_retorno_diario| (probables aportes/retiros de capital).
     Devuelve un dict con todas las métricas de riesgo.
     """
     if not historial or len(historial) < 5:
         return None
     precios = pd.Series([h["patrimonio"] for h in historial], dtype=float)
-    vol = volatilidad_anualizada(precios)
-    sp = sharpe(precios)
-    dd = drawdown_maximo(precios)
-    var95 = valor_en_riesgo(precios)
+    retornos = _retornos_diarios(precios)
+
+    aportes_mask = retornos.abs() > max_retorno_diario
+    aportes_detectados = int(aportes_mask.sum())
+    retornos_limpios = retornos[~aportes_mask]
+
+    if len(retornos_limpios) < 2:
+        return None
+
+    vol = float(retornos_limpios.std() * np.sqrt(252))
+    media = retornos_limpios.mean()
+    sp_val = float(media / retornos_limpios.std() * np.sqrt(252)) if retornos_limpios.std() > 0 else None
+
+    precios_limpios = (1 + retornos_limpios).cumprod() * float(precios.iloc[0])
+    precios_limpios = pd.concat([pd.Series([float(precios.iloc[0])]), precios_limpios]).reset_index(drop=True)
+    dd = drawdown_maximo(precios_limpios)
+
+    var95 = float(np.percentile(retornos_limpios, 5)) if len(retornos_limpios) >= 5 else None
     ultimo = float(precios.iloc[-1])
     var95_ars = var95 * ultimo if var95 is not None else None
+
     return {
-        "volatilidad_anual": round(vol * 100, 1) if vol is not None else None,
-        "sharpe": round(sp, 2) if sp is not None else None,
+        "volatilidad_anual": round(vol * 100, 1),
+        "sharpe": round(sp_val, 2) if sp_val is not None else None,
         "drawdown_maximo_pct": round(dd * 100, 1) if dd is not None else None,
         "var_95_pct": round(var95 * 100, 2) if var95 is not None else None,
         "var_95_ars": round(var95_ars, 0) if var95_ars is not None else None,
         "n_dias": len(historial),
+        "n_dias_limpios": len(retornos_limpios),
+        "aportes_detectados": aportes_detectados,
     }
 
 

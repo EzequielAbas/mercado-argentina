@@ -105,7 +105,7 @@ def aplicar_escenario(cartera: list, escenario: dict,
     total_valor = 0
 
     for p in cartera:
-        valor = p.get("valorizado_manual") or p.get("invertido", 0)
+        valor = p.get("_iol_valorizado") or p.get("valorizado_manual") or p.get("invertido", 0)
         tipo = p.get("tipo", "otro")
         ticker = p.get("ticker", "?")
         total_valor += valor
@@ -123,6 +123,8 @@ def aplicar_escenario(cartera: list, escenario: dict,
         impacto_riesgo = sens["riesgo"] * delta_riesgo * valor
 
         impacto = impacto_tasa + impacto_mep + impacto_infl + impacto_riesgo
+        # No se puede perder más del 100% del valor de una posición
+        impacto = max(impacto, -valor) if valor > 0 else impacto
         impacto_pct = (impacto / valor * 100) if valor else 0
 
         resultados.append({
