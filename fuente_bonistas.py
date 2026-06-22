@@ -330,12 +330,15 @@ def bonds_to_html_table(df: pd.DataFrame, max_rows: int = 20, show_mep: bool = F
     if df.empty:
         return "<p style='color:#888;font-size:12px'>Sin datos disponibles</p>"
 
-    if sort_by_tir and "tir" in df.columns:
-        df = df.copy()
-        df["_tir_abs"] = df["tir"].abs()
-        df = df.sort_values("_tir_abs", ascending=False).drop(columns=["_tir_abs"])
-
     cartera_tickers = cartera_tickers or set()
+    df = df.copy()
+    df["_en_cartera"] = df["ticker"].isin(cartera_tickers)
+    if sort_by_tir and "tir" in df.columns:
+        df["_tir_abs"] = df["tir"].abs()
+        df = df.sort_values(["_en_cartera", "_tir_abs"], ascending=[False, False])
+        df = df.drop(columns=["_tir_abs"])
+    else:
+        df = df.sort_values("_en_cartera", ascending=False)
     shown = df.head(max_rows)
     extra_en_cartera = []
     if cartera_tickers:
@@ -345,6 +348,7 @@ def bonds_to_html_table(df: pd.DataFrame, max_rows: int = 20, show_mep: bool = F
                 match = df[df["ticker"] == tk]
                 if not match.empty:
                     extra_en_cartera.append(match.iloc[0])
+    df = df.drop(columns=["_en_cartera"])
 
     extra_header = "<th>MEP impl.</th>" if show_mep else ""
     rows_html = ""
