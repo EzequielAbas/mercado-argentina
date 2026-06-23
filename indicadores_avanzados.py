@@ -332,8 +332,80 @@ def analizar_completo(df: pd.DataFrame) -> dict | None:
         "minus_di": round(v_mdi, 1) if v_mdi else None,
         "vwap": round(v_vwap, 2) if v_vwap else None,
         "fibonacci": fib,
+        "volume_spike": volume_spike(df),
+        "fvg": fair_value_gap(df),
+        "sr": soporte_resistencia(df),
         "n_datos": len(df),
         "sparkline": [round(float(x), 2) for x in close.tail(40).tolist()],
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+#  DETECTORES AVANZADOS (inspirados en ar-trading-bot)
+# ─────────────────────────────────────────────────────────────
+
+def volume_spike(df: pd.DataFrame, ventana: int = 20, umbral: float = 2.0) -> dict | None:
+    """Detecta si el volumen actual es un spike (> umbral × promedio)."""
+    vol = df["volume"]
+    if len(vol) < ventana:
+        return None
+    avg = vol.rolling(window=ventana).mean().iloc[-1]
+    actual = float(vol.iloc[-1])
+    if avg and avg > 0:
+        ratio = actual / avg
+        return {"ratio": round(ratio, 2), "es_spike": ratio > umbral, "promedio": round(avg, 0)}
+    return None
+
+
+def fair_value_gap(df: pd.DataFrame) -> list:
+    """
+    Detecta Fair Value Gaps (FVG) en las últimas ruedas.
+    Un FVG alcista: low[i] > high[i-2] (gap sin cubrir entre vela i-2 y vela i).
+    Un FVG bajista: high[i] < low[i-2].
+    Devuelve los últimos 3 gaps activos (no cubiertos por el precio actual).
+    """
+    if len(df) < 5:
+        return []
+    gaps = []
+    precio = float(df["close"].iloc[-1])
+    for i in range(2, len(df)):
+        h_prev2 = float(df["high"].iloc[i-2])
+        l_curr = float(df["low"].iloc[i])
+        l_prev2 = float(df["low"].iloc[i-2])
+        h_curr = float(df["high"].iloc[i])
+        if l_curr > h_prev2:
+            gap_start, gap_end = h_prev2, l_curr
+            if precio < gap_end:
+                gaps.append({"tipo": "alcista", "inicio": round(gap_start, 2), "fin": round(gap_end, 2)})
+        elif h_curr < l_prev2:
+            gap_start, gap_end = h_curr, l_prev2
+            if precio > gap_start:
+                gaps.append({"tipo": "bajista", "inicio": round(gap_start, 2), "fin": round(gap_end, 2)})
+    return gaps[-3:]
+
+
+def soporte_resistencia(df: pd.DataFrame, ventana: int = 20) -> dict:
+    """Calcula soportes y resistencias simples con pivots."""
+    if len(df) < ventana:
+        return {}
+    sub = df.tail(ventana * 3)
+    pivots_high = []
+    pivots_low = []
+    for i in range(2, len(sub) - 2):
+        h = float(sub["high"].iloc[i])
+        l = float(sub["low"].iloc[i])
+        if h > float(sub["high"].iloc[i-1]) and h > float(sub["high"].iloc[i-2]) and \
+           h > float(sub["high"].iloc[i+1]) and h > float(sub["high"].iloc[i+2]):
+            pivots_high.append(h)
+        if l < float(sub["low"].iloc[i-1]) and l < float(sub["low"].iloc[i-2]) and \
+           l < float(sub["low"].iloc[i+1]) and l < float(sub["low"].iloc[i+2]):
+            pivots_low.append(l)
+    precio = float(df["close"].iloc[-1])
+    resistencias = sorted([p for p in pivots_high if p > precio])[:2]
+    soportes = sorted([p for p in pivots_low if p < precio], reverse=True)[:2]
+    return {
+        "soportes": [round(s, 2) for s in soportes],
+        "resistencias": [round(r, 2) for r in resistencias],
     }
 
 
